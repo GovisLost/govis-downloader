@@ -2,9 +2,9 @@
 
 <p align="center"><img src="https://github.com/GovisLost/govis-downloader/blob/main/g.png?raw=true" alt="project-image"></p>
 
-<p id="description">Govis downloader is a very simple tool that makes downloading videos and music from youtube easier and faster!</p>
+<p id="description">Govis downloader je velmi jednoduchý nástroj který usnadňuje a zrychluje stahování videí a hudby z YouTube!</p>
 
-<h2>Project Screenshots:</h2>
+<h2>Screenshoty:</h2>
 
 <img src="https://i.ibb.co/84BFPwYN/image.webp" alt="project-screenshot" width="300" height="400/">
 
