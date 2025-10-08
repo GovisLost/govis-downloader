@@ -75,7 +75,6 @@ def main_menu():
     for widget in app.winfo_children():
         widget.destroy()
 
-    # Logo at top
     img_path = resource_path("g.png")
     image = Image.open(img_path)
     logo_image = ctk.CTkImage(light_image=image, dark_image=image, size=(120, 120))
@@ -103,3 +102,4 @@ app.resizable(False, False)
 
 main_menu()
 app.mainloop()
+
