@@ -6,6 +6,6 @@
 
 <h2>Screenshoty:</h2>
 
-<img src="https://i.ibb.co/84BFPwYN/image.webp" alt="project-screenshot" width="300" height="400/">
+<img src="https://i.ibb.co/84BFPwYN/image.webp" alt="project-screenshot" width="350" height="400/">
 
-<img src="https://media.discordapp.net/attachments/1063848613551288453/1425418463064756305/image.png?ex=68e783e4&amp;is=68e63264&amp;hm=ef4149836db4684dcbb6200db4490ee05473213a29a749a97bdc9d1be1137508&amp;=&amp;format=webp&amp;quality=lossless&amp;width=620&amp;height=670" alt="project-screenshot" width="300" height="400/">
+<img src="https://media.discordapp.net/attachments/1063848613551288453/1425418463064756305/image.png?ex=68e783e4&amp;is=68e63264&amp;hm=ef4149836db4684dcbb6200db4490ee05473213a29a749a97bdc9d1be1137508&amp;=&amp;format=webp&amp;quality=lossless&amp;width=620&amp;height=670" alt="project-screenshot" width="350" height="400/">
