@@ -1,10 +1,10 @@
 import customtkinter as ctk
-from pytubefix import YouTube
-from PIL import Image
-import shutil
+import yt_dlp
 import os
+import threading
+import imageio_ffmpeg as iio
+from PIL import Image
 import sys
-
 def resource_path(relative_path):
     try:
         base_path = sys._MEIPASS
@@ -14,92 +14,121 @@ def resource_path(relative_path):
 
 def get_download_path():
     return os.path.join(os.path.expanduser("~"), "Downloads")
-
-def video_download(url):
-    try:
-        yt = YouTube(url)
-        stream = yt.streams.get_highest_resolution()
-        download_folder = get_download_path()
-        stream.download(output_path=download_folder)
-        status_label.configure(text=f"🎬 Video staženo do: {download_folder}", text_color="green")
-    except Exception as e:
-        status_label.configure(text=f"❌ Chyba při stahování videa!", text_color="red")
-
-def audio_download(url):
-    try:
-        yt = YouTube(url)
-        stream = yt.streams.get_audio_only()
-        download_folder = get_download_path()
-        out_file = stream.download(output_path=download_folder)
-        base, ext = os.path.splitext(out_file)
-        new_file = base + ".mp3"
-        shutil.move(out_file, new_file)
-        status_label.configure(text=f"🎵 MP3 staženo do: {download_folder}", text_color="green")
-    except Exception as e:
-        status_label.configure(text=f"❌ Chyba při stahování audia!", text_color="red")
-
-def return_to_menu():
-    for widget in app.winfo_children():
-        widget.destroy()
-    main_menu()
-
-def input_video(download_type="video"):
-    for widget in app.winfo_children():
-        widget.destroy()
-
-    img_path = resource_path("g.png")
-    image = Image.open(img_path)
-    logo_image = ctk.CTkImage(light_image=image, dark_image=image, size=(120, 120))
-    ctk.CTkLabel(app, image=logo_image, text="").pack(pady=10)
-    app.logo_image = logo_image
-
-    ctk.CTkLabel(app, text="Zadej YouTube URL:", font=ctk.CTkFont(size=16, weight="bold")).pack(pady=(10, 10))
-
-    global entry, status_label
-    entry = ctk.CTkEntry(app, placeholder_text="https://www.youtube.com/...", width=300)
-    entry.pack(pady=10)
-
-    status_label = ctk.CTkLabel(app, text="", font=ctk.CTkFont(size=13))
-    status_label.pack(pady=10)
-
-    button_style = {"width": 180, "height": 40, "corner_radius": 10, "fg_color": "#d32f2f", "hover_color": "#b71c1c"}
-
-    if download_type == "video":
-        ctk.CTkButton(app, text="⬇ Stáhnout MP4", command=lambda: video_download(entry.get()), **button_style).pack(pady=10)
+total_bytes_expected = 0
+downloaded_bytes_total = 0
+merging = False
+def progress_hook(d):
+    global total_bytes_expected, downloaded_bytes_total, merging
+    status = d.get('status')
+    if status == 'downloading':
+        total_bytes = d.get('total_bytes') or d.get('total_bytes_estimate', 0)
+        downloaded_bytes = d.get('downloaded_bytes', 0)
+        total_bytes_expected = max(total_bytes_expected, total_bytes)
+        downloaded_bytes_total = downloaded_bytes_total + downloaded_bytes
+        if total_bytes_expected:
+            percent = min(downloaded_bytes_total / total_bytes_expected * 100, 100)
+            progress_bar.set(percent / 100)
+            progress_label.configure(text=f"{percent:.1f}% ({downloaded_bytes_total//1024//1024}MB / {total_bytes_expected//1024//1024}MB)")
+    elif status == 'finished':
+        merging = True
+        progress_label.configure(text="Merging video and audio…")
+        app.update_idletasks()
+    elif status == 'error':
+        merging = False
+def download_worker(fmt, url):
+    global total_bytes_expected, downloaded_bytes_total, merging
+    total_bytes_expected = 0
+    downloaded_bytes_total = 0
+    merging = False
+    download_folder = get_download_path()
+    ffmpeg_path = iio.get_ffmpeg_exe()
+    opts = {
+        "outtmpl": os.path.join(download_folder, "%(title)s.%(ext)s"),
+        "ffmpeg_location": ffmpeg_path,
+        "progress_hooks": [progress_hook],
+        "merge_output_format": "mp4" if fmt=="MP4" else None,
+        "noplaylist": True,
+    }
+    if fmt == "MP4":
+        res = resolution_var.get()
+        opts["format"] = f"bestvideo[height<={res}]+bestaudio/best"
     else:
-        ctk.CTkButton(app, text="⬇ Stáhnout MP3", command=lambda: audio_download(entry.get()), **button_style).pack(pady=10)
-
-    ctk.CTkButton(app, text="↩ Zpět do menu", command=return_to_menu, **button_style).pack(pady=5)
-
-def main_menu():
-    for widget in app.winfo_children():
-        widget.destroy()
-
-    img_path = resource_path("g.png")
-    image = Image.open(img_path)
-    logo_image = ctk.CTkImage(light_image=image, dark_image=image, size=(120, 120))
-    ctk.CTkLabel(app, image=logo_image, text="").pack(pady=10)
-    app.logo_image = logo_image
-
-    ctk.CTkLabel(app, text="Govis YouTube Downloader", font=ctk.CTkFont(size=20, weight="bold")).pack(pady=10)
-    ctk.CTkLabel(app, text="Vyber si formát:", font=ctk.CTkFont(size=16)).pack(pady=(5, 15))
-
-    frame = ctk.CTkFrame(app, fg_color="transparent")
-    frame.pack(pady=10)
-
-    button_style = {"width": 120, "height": 40, "corner_radius": 10, "fg_color": "#d32f2f", "hover_color": "#b71c1c"}
-
-    ctk.CTkButton(frame, text="🎞 MP4", command=lambda: input_video("video"), **button_style).pack(side="left", padx=10)
-    ctk.CTkButton(frame, text="🔊 MP3", command=lambda: input_video("audio"), **button_style).pack(side="left", padx=10)
-
+        opts["format"] = "bestaudio/best"
+        opts["postprocessors"] = [{
+            "key": "FFmpegExtractAudio",
+            "preferredcodec": "mp3",
+            "preferredquality": "192"
+        }]
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            ydl.download([url])
+        status_label.configure(text=f"✅ Stáhnuto do: {download_folder}", text_color="white")
+    except Exception as e:
+        status_label.configure(text=f"❌ Chyba při stahování!\n{e}", text_color="white")
+    finally:
+        app.after(2000, hide_progress_bar)
+        download_button.configure(state="normal")
+def start_download():
+    url = entry.get()
+    fmt = format_var.get()
+    status_label.configure(text="", text_color="white")
+    if not url.strip():
+        status_label.configure(text="❌ Zadej URL!", text_color="white")
+        return
+    download_button.configure(state="disabled")
+    progress_bar.pack(pady=10)
+    progress_label.pack(pady=5)
+    progress_bar.set(0)
+    progress_label.configure(text="0%")
+    threading.Thread(target=download_worker, args=(fmt, url), daemon=True).start()
+def hide_progress_bar():
+    progress_bar.pack_forget()
+    progress_label.pack_forget()
+def toggle_resolution():
+    if format_var.get() == "MP4":
+        resolution_frame.pack(before=download_button, pady=5)
+    else:
+        resolution_frame.pack_forget()
 ctk.set_appearance_mode("dark")
 ctk.set_default_color_theme("dark-blue")
-
 app = ctk.CTk()
-app.geometry("420x420")
-app.title("Govis YouTube Downloader")
+app.title("Govis YT Downloader")
+app.geometry("500x550")
 app.resizable(False, False)
-
-main_menu()
+header_frame = ctk.CTkFrame(app, fg_color="transparent")
+header_frame.pack(pady=20)
+img_path = resource_path("g.png")
+image = Image.open(img_path)
+image = image.resize((60, 60))
+app.logo_image = ctk.CTkImage(light_image=image, dark_image=image, size=(60, 60))
+ctk.CTkLabel(header_frame, image=app.logo_image, text="").pack(side="left", padx=10)
+ctk.CTkLabel(header_frame, text="Govis YouTube Downloader", 
+             font=ctk.CTkFont(size=22, weight="bold")).pack(side="left", padx=10)
+ctk.CTkLabel(app, text="Zadej YouTube URL:", font=ctk.CTkFont(size=14)).pack(pady=5)
+entry = ctk.CTkEntry(app, placeholder_text="https://www.youtube.com/...", width=400)
+entry.pack(pady=5)
+ctk.CTkLabel(app, text="Vyber formát:", font=ctk.CTkFont(size=14)).pack(pady=10)
+format_var = ctk.StringVar(value="MP4")
+format_frame = ctk.CTkFrame(app, fg_color="transparent")
+format_frame.pack(pady=5)
+ctk.CTkRadioButton(format_frame, text="MP4", variable=format_var, value="MP4", command=toggle_resolution,
+                   fg_color="#d32f2f", hover_color="#b71c1c", text_color="white").pack(side="left", padx=20)
+ctk.CTkRadioButton(format_frame, text="MP3", variable=format_var, value="MP3", command=toggle_resolution,
+                   fg_color="#d32f2f", hover_color="#b71c1c", text_color="white").pack(side="left", padx=20)
+resolutions = ["1080", "720", "480", "360"]
+resolution_var = ctk.StringVar(value="1080")
+resolution_frame = ctk.CTkFrame(app, fg_color="transparent")
+resolution_label = ctk.CTkLabel(resolution_frame, text="Vyber rozlišení (MP4):", font=ctk.CTkFont(size=14))
+resolution_label.pack(pady=5)
+resolution_optionmenu = ctk.CTkOptionMenu(resolution_frame, values=resolutions, variable=resolution_var,
+                                          fg_color="#7a1f1f", button_color="#a32b2b", text_color="white", width=150)
+resolution_optionmenu.pack(pady=5)
+download_button = ctk.CTkButton(app, text="⬇ Stáhnout", width=200, height=40,
+                                fg_color="#d32f2f", hover_color="#b71c1c", command=start_download)
+download_button.pack(pady=15)
+progress_bar = ctk.CTkProgressBar(app, width=400)
+progress_label = ctk.CTkLabel(app, text="0%", font=ctk.CTkFont(size=13))
+status_label = ctk.CTkLabel(app, text="", font=ctk.CTkFont(size=13))
+status_label.pack(pady=10)
+toggle_resolution()
 app.mainloop()
-
