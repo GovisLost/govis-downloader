@@ -1,3 +1,4 @@
-pytubefix
+yt_dlp
 customtkinter
 pillow
+imageio_ffmpeg
