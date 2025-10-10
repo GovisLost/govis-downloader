@@ -14,26 +14,31 @@ def resource_path(relative_path):
 
 def get_download_path():
     return os.path.join(os.path.expanduser("~"), "Downloads")
-total_bytes_expected = 0
-downloaded_bytes_total = 0
+download_progress = {}
 merging = False
+lock = threading.Lock()
 def progress_hook(d):
-    global total_bytes_expected, downloaded_bytes_total, merging
-    status = d.get('status')
-    if status == 'downloading':
-        total_bytes = d.get('total_bytes') or d.get('total_bytes_estimate', 0)
-        downloaded_bytes = d.get('downloaded_bytes', 0)
-        total_bytes_expected = max(total_bytes_expected, total_bytes)
-        downloaded_bytes_total = downloaded_bytes_total + downloaded_bytes
-        if total_bytes_expected:
-            percent = min(downloaded_bytes_total / total_bytes_expected * 100, 100)
-            progress_bar.set(percent / 100)
-            progress_label.configure(text=f"{percent:.1f}% ({downloaded_bytes_total//1024//1024}MB / {total_bytes_expected//1024//1024}MB)")
-    elif status == 'finished':
+    global merging
+    status = d.get("status")
+    filename = d.get("filename", "unknown")
+    if status == "downloading":
+        merging = False
+        total_bytes = d.get("total_bytes") or d.get("total_bytes_estimate", 0)
+        downloaded_bytes = d.get("downloaded_bytes", 0)
+        with lock:
+            download_progress[filename] = (downloaded_bytes, total_bytes)
+            total_downloaded = sum(v[0] for v in download_progress.values())
+            total_size = sum(v[1] for v in download_progress.values() if v[1])
+        percent = (total_downloaded / total_size * 100) if total_size else 0
+        progress_bar.set(min(percent / 100, 1))
+        progress_label.configure(
+            text=f"{percent:.1f}% ({total_downloaded//1024//1024}MB / {total_size//1024//1024}MB)"
+        )
+    elif status == "finished":
         merging = True
-        progress_label.configure(text="Merging video and audio…")
+        progress_label.configure(text="🔄 Slučování videa a zvuku…")
         app.update_idletasks()
-    elif status == 'error':
+    elif status == "error":
         merging = False
 def download_worker(fmt, url):
     global total_bytes_expected, downloaded_bytes_total, merging
